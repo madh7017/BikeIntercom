@@ -398,6 +398,18 @@ class MainActivity : ComponentActivity() {
                         color = PureWhite
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = {
+                            updateManager.checkForUpdates(1) { apkUrl ->
+                                runOnUiThread { updateManager.downloadAndInstall(apkUrl) }
+                            }
+                        }) {
+                            Icon(
+                                Icons.Default.SystemUpdate,
+                                contentDescription = "Check for Update",
+                                tint = PureWhite.copy(alpha = 0.7f),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                         Box(
                             modifier = Modifier
                                 .size(6.dp)
