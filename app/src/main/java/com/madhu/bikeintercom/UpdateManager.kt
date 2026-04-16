@@ -39,7 +39,7 @@ class UpdateManager(private val context: Context) {
     }
 
     fun downloadAndInstall(apkUrl: String) {
-        val destination = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "update.apk")
+        val destination = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "BikeIntercom_Update.apk")
         if (destination.exists()) destination.delete()
 
         val request = DownloadManager.Request(Uri.parse(apkUrl))
@@ -47,6 +47,8 @@ class UpdateManager(private val context: Context) {
             .setDescription("Downloading latest version...")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setDestinationUri(Uri.fromFile(destination))
+            .setAllowedOverMetered(true)
+            .setAllowedOverRoaming(true)
 
         val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         val downloadId = downloadManager.enqueue(request)
