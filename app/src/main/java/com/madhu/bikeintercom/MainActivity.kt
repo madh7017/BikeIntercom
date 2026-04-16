@@ -242,6 +242,18 @@ class MainActivity : ComponentActivity() {
                 ) {
                     Spacer(modifier = Modifier.height(24.dp))
                     
+                    var showTestText by remember { mutableStateOf(true) }
+                    if (showTestText) {
+                        Text(
+                            "updates are working",
+                            color = StatusGreen,
+                            modifier = Modifier
+                                .clickable { showTestText = false }
+                                .padding(8.dp),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
                     GlassCard(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(24.dp)) {
                             Text(
