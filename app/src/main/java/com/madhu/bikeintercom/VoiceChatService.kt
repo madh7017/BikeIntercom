@@ -16,6 +16,8 @@ import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import android.os.BatteryManager
+import kotlinx.coroutines.*
 import java.net.Socket
 
 class VoiceChatService : Service() {
@@ -23,6 +25,8 @@ class VoiceChatService : Service() {
     private var voiceChatManager: VoiceChatManager? = null
     private val binder = LocalBinder()
     private var audioManager: AudioManager? = null
+    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var batteryJob: Job? = null
 
     private val noisyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -34,6 +38,7 @@ class VoiceChatService : Service() {
     }
     
     var onLocationUpdate: ((Double, Double) -> Unit)? = null
+    var onBatteryUpdate: ((Int) -> Unit)? = null
 
     companion object {
         const val CHANNEL_ID = "VoiceChatChannel"
@@ -72,8 +77,13 @@ class VoiceChatService : Service() {
         voiceChatManager?.onLocationReceived = { lat, lng ->
             onLocationUpdate?.invoke(lat, lng)
         }
+
+        voiceChatManager?.onBatteryReceived = { level ->
+            onBatteryUpdate?.invoke(level)
+        }
         
         voiceChatManager?.startCommunication()
+        startBatteryBroadcasting()
         
         val notification = createNotification()
         
@@ -143,7 +153,20 @@ class VoiceChatService : Service() {
         }
     }
 
+    private fun startBatteryBroadcasting() {
+        batteryJob?.cancel()
+        batteryJob = serviceScope.launch {
+            while (isActive) {
+                val batteryManager = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+                val level = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                voiceChatManager?.sendBatteryLevel(level)
+                delay(300000) // 5 minutes
+            }
+        }
+    }
+
     override fun onDestroy() {
+        batteryJob?.cancel()
         voiceChatManager?.stopCommunication()
         try {
             unregisterReceiver(noisyReceiver)

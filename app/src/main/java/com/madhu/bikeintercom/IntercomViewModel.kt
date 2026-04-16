@@ -24,8 +24,9 @@ class IntercomViewModel : ViewModel() {
     var selectedDeviceAddress by mutableStateOf<String?>(null)
     var showTutorial by mutableStateOf(false)
     
-    // Distance tracking
+    // Distance and Partner stats
     var currentDeviceDistance by mutableStateOf<String?>(null)
+    var partnerBattery by mutableStateOf<Int?>(null)
     
     val devices = mutableStateListOf<WifiP2pDevice>()
 

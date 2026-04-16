@@ -88,6 +88,12 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+
+            voiceChatService?.onBatteryUpdate = { level ->
+                runOnUiThread {
+                    viewModel.partnerBattery = level
+                }
+            }
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -98,6 +104,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        updateManager = UpdateManager(this)
+        
+        // Check for updates on startup
+        updateManager.checkForUpdates(1) { apkUrl -> // Default to 1 if BuildConfig is not yet generated
+            runOnUiThread {
+                // Show a simple dialog or just start downloading
+                updateManager.downloadAndInstall(apkUrl)
+            }
+        }
 
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         startLocationUpdates()
@@ -338,6 +354,14 @@ class MainActivity : ComponentActivity() {
                                     color = PureWhite,
                                     letterSpacing = 2.sp
                                 )
+                                viewModel.partnerBattery?.let { battery ->
+                                    Text(
+                                        "PARTNER BATTERY: $battery%",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = if (battery < 20) StatusRed else SoftGray,
+                                        modifier = Modifier.padding(top = 8.dp)
+                                    )
+                                }
                                 Spacer(modifier = Modifier.height(40.dp))
                                 Button(
                                     onClick = { 

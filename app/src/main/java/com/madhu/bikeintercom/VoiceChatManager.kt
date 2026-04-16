@@ -33,6 +33,7 @@ class VoiceChatManager(private val socket: Socket) {
     private var outputStream: java.io.DataOutputStream? = null
     
     var onLocationReceived: ((Double, Double) -> Unit)? = null
+    var onBatteryReceived: ((Int) -> Unit)? = null
 
     init {
         try {
@@ -47,6 +48,7 @@ class VoiceChatManager(private val socket: Socket) {
 
     private val TYPE_AUDIO = 0.toByte()
     private val TYPE_LOCATION = 1.toByte()
+    private val TYPE_BATTERY = 2.toByte()
 
     @SuppressLint("MissingPermission")
     fun startCommunication() {
@@ -164,6 +166,9 @@ class VoiceChatManager(private val socket: Socket) {
                         val lat = inputStream?.readDouble() ?: 0.0
                         val lng = inputStream?.readDouble() ?: 0.0
                         onLocationReceived?.invoke(lat, lng)
+                    } else if (type == TYPE_BATTERY) {
+                        val level = inputStream?.readInt() ?: 0
+                        onBatteryReceived?.invoke(level)
                     }
                 }
             } catch (e: Exception) {
@@ -188,6 +193,23 @@ class VoiceChatManager(private val socket: Socket) {
                 }
             } catch (e: Exception) {
                 Log.e("VoiceChatManager", "Failed to send location")
+                FirebaseCrashlytics.getInstance().recordException(e)
+            }
+        }.start()
+    }
+
+    fun sendBatteryLevel(level: Int) {
+        Thread {
+            try {
+                outputStream?.let {
+                    synchronized(it) {
+                        it.writeByte(TYPE_BATTERY.toInt())
+                        it.writeInt(level)
+                        it.flush()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("VoiceChatManager", "Failed to send battery level")
                 FirebaseCrashlytics.getInstance().recordException(e)
             }
         }.start()

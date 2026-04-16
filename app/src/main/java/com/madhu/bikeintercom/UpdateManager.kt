@@ -8,16 +8,37 @@ import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.util.Log
 import androidx.core.content.FileProvider
+import com.google.firebase.crashlytics.FirebaseCrashlytics
+import org.json.JSONObject
 import java.io.File
+import java.net.URL
+import kotlin.concurrent.thread
 
 class UpdateManager(private val context: Context) {
 
-    // You should host a small JSON or text file on GitHub/Firebase with the latest version
-    // For now, this is a placeholder. You will update this URL when you host your APK.
-    private val UPDATE_URL = "https://your-server.com/bike-intercom-latest.apk" 
+    private val GITHUB_JSON_URL = "https://raw.githubusercontent.com/madh7017/BikeIntercom/main/update.json"
 
-    fun downloadAndInstall(apkUrl: String = UPDATE_URL) {
+    fun checkForUpdates(currentVersion: Int, onUpdateAvailable: (String) -> Unit) {
+        thread {
+            try {
+                val jsonText = URL(GITHUB_JSON_URL).readText()
+                val json = JSONObject(jsonText)
+                val latestVersion = json.getInt("versionCode")
+                val apkUrl = json.getString("apkUrl")
+
+                if (latestVersion > currentVersion) {
+                    onUpdateAvailable(apkUrl)
+                }
+            } catch (e: Exception) {
+                Log.e("UpdateManager", "Failed to check for updates", e)
+                FirebaseCrashlytics.getInstance().recordException(e)
+            }
+        }
+    }
+
+    fun downloadAndInstall(apkUrl: String) {
         val destination = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "update.apk")
         if (destination.exists()) destination.delete()
 
