@@ -28,6 +28,9 @@ class IntercomViewModel : ViewModel() {
     var currentDeviceDistance by mutableStateOf<String?>(null)
     var partnerBattery by mutableStateOf<Int?>(null)
     
+    // Update logic
+    var updateUrl by mutableStateOf<String?>(null)
+    
     val devices = mutableStateListOf<WifiP2pDevice>()
 
     fun updateDevices(newDevices: List<WifiP2pDevice>) {

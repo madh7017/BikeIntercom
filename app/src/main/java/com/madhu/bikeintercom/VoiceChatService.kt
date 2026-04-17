@@ -27,11 +27,29 @@ class VoiceChatService : Service() {
     private var audioManager: AudioManager? = null
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var batteryJob: Job? = null
+    private var audioFocusRequest: AudioFocusRequest? = null
+
+    private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                // Regained focus: resume audio
+                voiceChatManager?.setMicMuted(false)
+                audioManager?.startBluetoothSco()
+            }
+            AudioManager.AUDIOFOCUS_LOSS, AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                // Lost focus: mute and stop SCO to allow other app (like Phone/GPS) to use it
+                voiceChatManager?.setMicMuted(true)
+                audioManager?.stopBluetoothSco()
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                // Optional: Lower volume if supported, but for intercom, we usually just let it be or mute
+            }
+        }
+    }
 
     private val noisyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (AudioManager.ACTION_AUDIO_BECOMING_NOISY == intent?.action) {
-                // Earphones unplugged, maybe pause or switch to earpiece
                 audioManager?.isSpeakerphoneOn = false
             }
         }
@@ -63,38 +81,63 @@ class VoiceChatService : Service() {
     }
 
     fun startVoiceChat(socket: Socket) {
-        // Configure audio for intercom
+        // Request Audio Focus to handle interruptions from other apps
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                .setAudioAttributes(AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build())
+                .setOnAudioFocusChangeListener(audioFocusChangeListener)
+                .build()
+            audioFocusRequest?.let { audioManager?.requestAudioFocus(it) }
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager?.requestAudioFocus(
+                audioFocusChangeListener,
+                AudioManager.STREAM_VOICE_CALL,
+                AudioManager.AUDIOFOCUS_GAIN
+            )
+        }
+
         audioManager?.apply {
             mode = AudioManager.MODE_IN_COMMUNICATION
             startBluetoothSco()
             isBluetoothScoOn = true
-            isSpeakerphoneOn = true // Fallback to speaker if no headset
+            isSpeakerphoneOn = true
         }
 
-        voiceChatManager?.stopCommunication()
-        voiceChatManager = VoiceChatManager(socket)
-        
-        voiceChatManager?.onLocationReceived = { lat, lng ->
-            onLocationUpdate?.invoke(lat, lng)
+        if (voiceChatManager == null) {
+            voiceChatManager = VoiceChatManager()
+            voiceChatManager?.onLocationReceived = { lat, lng ->
+                onLocationUpdate?.invoke(lat, lng)
+            }
+            voiceChatManager?.onBatteryReceived = { level ->
+                onBatteryUpdate?.invoke(level)
+            }
+            voiceChatManager?.startCommunication()
+            
+            val notification = createNotification()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+            startBatteryBroadcasting()
         }
+        
+        voiceChatManager?.addSocket(socket)
+    }
 
-        voiceChatManager?.onBatteryReceived = { level ->
-            onBatteryUpdate?.invoke(level)
-        }
-        
-        voiceChatManager?.startCommunication()
-        startBatteryBroadcasting()
-        
-        val notification = createNotification()
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+    private fun startBatteryBroadcasting() {
+        batteryJob?.cancel()
+        batteryJob = serviceScope.launch {
+            while (isActive) {
+                val batteryManager = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+                val level = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                voiceChatManager?.sendBatteryLevel(level)
+                delay(300000) // 5 minutes
+            }
         }
     }
 
@@ -103,7 +146,13 @@ class VoiceChatService : Service() {
     }
 
     fun stopVoiceChat() {
-        // Reset audio settings
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioFocusRequest?.let { audioManager?.abandonAudioFocusRequest(it) }
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager?.abandonAudioFocus(audioFocusChangeListener)
+        }
+
         audioManager?.apply {
             isBluetoothScoOn = false
             stopBluetoothSco()
@@ -150,18 +199,6 @@ class VoiceChatService : Service() {
             )
             val manager = getSystemService(NotificationManager::class.java)
             manager?.createNotificationChannel(channel)
-        }
-    }
-
-    private fun startBatteryBroadcasting() {
-        batteryJob?.cancel()
-        batteryJob = serviceScope.launch {
-            while (isActive) {
-                val batteryManager = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
-                val level = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-                voiceChatManager?.sendBatteryLevel(level)
-                delay(300000) // 5 minutes
-            }
         }
     }
 

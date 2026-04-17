@@ -11,9 +11,11 @@ class ServerClass(private val onSocketAccepted: (Socket) -> Unit) : Thread() {
     override fun run() {
         try {
             serverSocket = ServerSocket(8888)
-            val socket = serverSocket?.accept()
-            if (socket != null) {
-                onSocketAccepted(socket)
+            while (!isInterrupted) {
+                val socket = serverSocket?.accept()
+                if (socket != null) {
+                    onSocketAccepted(socket)
+                }
             }
         } catch (e: IOException) {
             e.printStackTrace()

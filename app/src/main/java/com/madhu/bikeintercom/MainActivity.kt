@@ -120,7 +120,7 @@ class MainActivity : ComponentActivity() {
         // Check for updates on startup
         updateManager.checkForUpdates(currentVersion) { apkUrl ->
             runOnUiThread {
-                updateManager.downloadAndInstall(apkUrl)
+                viewModel.updateUrl = apkUrl
             }
         }
 
@@ -198,18 +198,43 @@ class MainActivity : ComponentActivity() {
             containerColor = Color.Transparent,
             floatingActionButtonPosition = FabPosition.Center,
             floatingActionButton = {
-                GlassMicButton(
-                    isActive = viewModel.isVoiceActive && viewModel.connectionStatus == ConnectionStatus.CONNECTED,
-                    isEnabled = viewModel.connectionStatus == ConnectionStatus.CONNECTED,
-                    onClick = { 
-                        if (viewModel.connectionStatus == ConnectionStatus.CONNECTED) {
-                            viewModel.isVoiceActive = !viewModel.isVoiceActive
-                            voiceChatService?.setMicMuted(!viewModel.isVoiceActive)
-                        } else {
-                            scope.launch { snackbarHostState.showSnackbar("Link Required for Comms") }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    if (viewModel.updateUrl != null) {
+                        GlassCard(
+                            modifier = Modifier
+                                .padding(bottom = 16.dp)
+                                .clickable {
+                                    viewModel.updateUrl?.let { url ->
+                                        updateManager.downloadAndInstall(url)
+                                        viewModel.updateUrl = null
+                                    }
+                                },
+                            cornerRadius = 12.dp
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.SystemUpdate, contentDescription = null, tint = StatusGreen, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("New Version Available - Tap to Install", color = PureWhite, style = MaterialTheme.typography.labelMedium)
+                            }
                         }
                     }
-                )
+                    
+                    GlassMicButton(
+                        isActive = viewModel.isVoiceActive && viewModel.connectionStatus == ConnectionStatus.CONNECTED,
+                        isEnabled = viewModel.connectionStatus == ConnectionStatus.CONNECTED,
+                        onClick = { 
+                            if (viewModel.connectionStatus == ConnectionStatus.CONNECTED) {
+                                viewModel.isVoiceActive = !viewModel.isVoiceActive
+                                voiceChatService?.setMicMuted(!viewModel.isVoiceActive)
+                            } else {
+                                scope.launch { snackbarHostState.showSnackbar("Link Required for Comms") }
+                            }
+                        }
+                    )
+                }
             }
         ) { padding ->
             Box(
@@ -648,7 +673,8 @@ class MainActivity : ComponentActivity() {
         voiceChatService?.startVoiceChat(socket)
         runOnUiThread {
             viewModel.setStatus(ConnectionStatus.CONNECTED)
-            viewModel.selectedDeviceAddress = null
+            viewModel.isVoiceActive = true
+            voiceChatService?.setMicMuted(false)
         }
     }
 
