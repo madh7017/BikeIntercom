@@ -432,18 +432,6 @@ class MainActivity : ComponentActivity() {
                         color = PureWhite
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = {
-                            updateManager.checkForUpdates(1) { apkUrl ->
-                                runOnUiThread { updateManager.downloadAndInstall(apkUrl) }
-                            }
-                        }) {
-                            Icon(
-                                Icons.Default.SystemUpdate,
-                                contentDescription = "Check for Update",
-                                tint = PureWhite.copy(alpha = 0.7f),
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
                         Box(
                             modifier = Modifier
                                 .size(6.dp)
@@ -638,11 +626,31 @@ class MainActivity : ComponentActivity() {
 
     fun connectToDevice(device: WifiP2pDevice) {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return
+        
         viewModel.setStatus(ConnectionStatus.PAIRING)
-        val config = WifiP2pConfig().apply { deviceAddress = device.deviceAddress }
+        
+        // Force a group removal first to ensure a clean slate
+        manager.removeGroup(channel, object : WifiP2pManager.ActionListener {
+            override fun onSuccess() { proceedWithConnection(device) }
+            override fun onFailure(reason: Int) { proceedWithConnection(device) }
+        })
+    }
+
+    private fun proceedWithConnection(device: WifiP2pDevice) {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return
+
+        val config = WifiP2pConfig().apply {
+            deviceAddress = device.deviceAddress
+            groupOwnerIntent = 15 // Highest priority to be group owner if needed
+        }
+        
         manager.connect(channel, config, object : WifiP2pManager.ActionListener {
-            override fun onSuccess() {}
-            override fun onFailure(p0: Int) { viewModel.setStatus(ConnectionStatus.FAILED) }
+            override fun onSuccess() {
+                // Connection initiated, wait for broadcast receiver
+            }
+            override fun onFailure(reason: Int) {
+                viewModel.setStatus(ConnectionStatus.FAILED)
+            }
         })
     }
 
