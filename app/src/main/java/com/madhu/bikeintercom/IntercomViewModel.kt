@@ -20,9 +20,12 @@ class IntercomViewModel : ViewModel() {
     var riderName by mutableStateOf("RIDER-ONE")
     var connectionStatus by mutableStateOf(ConnectionStatus.READY)
     var isVoiceActive by mutableStateOf(false)
+    var isSpeakerphoneOn by mutableStateOf(true)
+    var isAudioOutputEnabled by mutableStateOf(true)
     var isSearching by mutableStateOf(false)
     var selectedDeviceAddress by mutableStateOf<String?>(null)
     var showTutorial by mutableStateOf(false)
+    var isServiceRunning by mutableStateOf(false)
     
     // Distance and Partner stats
     var currentDeviceDistance by mutableStateOf<String?>(null)

@@ -78,6 +78,11 @@ class MainActivity : ComponentActivity() {
             voiceChatService = binder.getService()
             isBound = true
             
+            // Sync UI state with Service state
+            if (voiceChatService?.isServiceRunning == true) {
+                viewModel.setStatus(ConnectionStatus.CONNECTED)
+            }
+            
             voiceChatService?.onLocationUpdate = { lat, lng ->
                 val otherLocation = LatLng(lat, lng)
                 myCurrentLocation?.let { myLoc ->
@@ -127,6 +132,11 @@ class MainActivity : ComponentActivity() {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         startLocationUpdates()
 
+        // Bind the service on startup to check for existing connections
+        val intent = Intent(this, VoiceChatService::class.java)
+        startService(intent)
+        bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+
         setContent {
             BikeIntercomTheme {
                 MainScreen(viewModel)
@@ -147,10 +157,6 @@ class MainActivity : ComponentActivity() {
         }
 
         requestPermissions()
-
-        val intent = Intent(this, VoiceChatService::class.java)
-        startService(intent)
-        bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
     }
 
     private fun startLocationUpdates() {
@@ -396,6 +402,46 @@ class MainActivity : ComponentActivity() {
                                         modifier = Modifier.padding(top = 8.dp)
                                     )
                                 }
+                                
+                                Spacer(modifier = Modifier.height(24.dp))
+                                
+                                // Output Controls Row
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceEvenly,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Speaker Toggle (Call vs Normal)
+                                    IconButton(
+                                        onClick = {
+                                            viewModel.isSpeakerphoneOn = !viewModel.isSpeakerphoneOn
+                                            voiceChatService?.setSpeakerphoneOn(viewModel.isSpeakerphoneOn)
+                                        },
+                                        modifier = Modifier.background(if (viewModel.isSpeakerphoneOn) PureWhite.copy(alpha = 0.2f) else Color.Transparent, CircleShape)
+                                    ) {
+                                        Icon(
+                                            if (viewModel.isSpeakerphoneOn) Icons.Default.VolumeUp else Icons.Default.Hearing,
+                                            contentDescription = null,
+                                            tint = PureWhite
+                                        )
+                                    }
+
+                                    // Master Mute Output (Off button)
+                                    IconButton(
+                                        onClick = {
+                                            viewModel.isAudioOutputEnabled = !viewModel.isAudioOutputEnabled
+                                            voiceChatService?.setAudioOutputEnabled(viewModel.isAudioOutputEnabled)
+                                        },
+                                        modifier = Modifier.background(if (!viewModel.isAudioOutputEnabled) StatusRed.copy(alpha = 0.4f) else Color.Transparent, CircleShape)
+                                    ) {
+                                        Icon(
+                                            if (viewModel.isAudioOutputEnabled) Icons.Default.Headset else Icons.Default.HeadsetOff,
+                                            contentDescription = null,
+                                            tint = if (viewModel.isAudioOutputEnabled) PureWhite else StatusRed
+                                        )
+                                    }
+                                }
+
                                 Spacer(modifier = Modifier.height(40.dp))
                                 Button(
                                     onClick = { 

@@ -31,6 +31,7 @@ class VoiceChatManager {
     private var track: AudioTrack? = null
     private var isRunning = false
     private var isMicMuted = false
+    private var isAudioOutputEnabled = true
 
     private val sockets = CopyOnWriteArrayList<Socket>()
     private val outputStreams = CopyOnWriteArrayList<DataOutputStream>()
@@ -253,6 +254,16 @@ class VoiceChatManager {
     }
 
     fun setMicMuted(muted: Boolean) { isMicMuted = muted }
+
+    fun setAudioOutputEnabled(enabled: Boolean) {
+        isAudioOutputEnabled = enabled
+        if (!enabled) {
+            track?.pause()
+            track?.flush()
+        } else {
+            track?.play()
+        }
+    }
 
     private fun stopRecording() {
         try { recorder?.stop(); recorder?.release(); recorder = null } catch (e: Exception) {}

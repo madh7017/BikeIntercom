@@ -81,7 +81,6 @@ class VoiceChatService : Service() {
     }
 
     fun startVoiceChat(socket: Socket) {
-        // Request Audio Focus to handle interruptions from other apps
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
                 .setAudioAttributes(AudioAttributes.Builder()
@@ -127,7 +126,11 @@ class VoiceChatService : Service() {
         }
         
         voiceChatManager?.addSocket(socket)
+        isServiceRunning = true
     }
+
+    var isServiceRunning = false
+        private set
 
     private fun startBatteryBroadcasting() {
         batteryJob?.cancel()
@@ -173,6 +176,14 @@ class VoiceChatService : Service() {
 
     fun setMicMuted(muted: Boolean) {
         voiceChatManager?.setMicMuted(muted)
+    }
+
+    fun setSpeakerphoneOn(on: Boolean) {
+        audioManager?.isSpeakerphoneOn = on
+    }
+
+    fun setAudioOutputEnabled(enabled: Boolean) {
+        voiceChatManager?.setAudioOutputEnabled(enabled)
     }
 
     private fun createNotification(): Notification {
