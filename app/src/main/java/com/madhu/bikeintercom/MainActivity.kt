@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.wifi.p2p.WifiP2pConfig
 import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pManager
+import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
@@ -107,10 +108,18 @@ class MainActivity : ComponentActivity() {
 
         updateManager = UpdateManager(this)
         
+        // Get current version from PackageInfo
+        val currentVersion = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0)).longVersionCode.toInt()
+            } else {
+                packageManager.getPackageInfo(packageName, 0).versionCode
+            }
+        } catch (e: Exception) { 1 }
+
         // Check for updates on startup
-        updateManager.checkForUpdates(1) { apkUrl -> // Default to 1 if BuildConfig is not yet generated
+        updateManager.checkForUpdates(currentVersion) { apkUrl ->
             runOnUiThread {
-                // Show a simple dialog or just start downloading
                 updateManager.downloadAndInstall(apkUrl)
             }
         }
@@ -242,18 +251,6 @@ class MainActivity : ComponentActivity() {
                 ) {
                     Spacer(modifier = Modifier.height(24.dp))
                     
-                    var showTestText by remember { mutableStateOf(true) }
-                    if (showTestText) {
-                        Text(
-                            "updates are working",
-                            color = StatusGreen,
-                            modifier = Modifier
-                                .clickable { showTestText = false }
-                                .padding(8.dp),
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-
                     GlassCard(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(24.dp)) {
                             Text(
