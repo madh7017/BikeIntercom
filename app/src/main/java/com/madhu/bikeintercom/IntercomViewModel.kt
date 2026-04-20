@@ -18,6 +18,11 @@ enum class ConnectionStatus(val label: String) {
 
 class IntercomViewModel : ViewModel() {
     var riderName by mutableStateOf("RIDER-ONE")
+    var groupPassword by mutableStateOf("")
+    var isGroupOwner by mutableStateOf(false)
+    var isGroupCreated by mutableStateOf(false)
+    var isMinimized by mutableStateOf(false)
+
     var connectionStatus by mutableStateOf(ConnectionStatus.READY)
     var isVoiceActive by mutableStateOf(false)
     var isSpeakerphoneOn by mutableStateOf(true)

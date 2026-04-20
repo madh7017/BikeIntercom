@@ -11,6 +11,7 @@ import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.animation.*
@@ -280,6 +281,18 @@ class MainActivity : ComponentActivity() {
                         .padding(horizontal = 20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    // State for Dialogs moved outside to be accessible by LazyColumn
+                    var showCreateGroupDialog by remember { mutableStateOf(false) }
+                    var tempGroupName by remember { mutableStateOf(viewModel.riderName) }
+                    var tempGroupPassword by remember { mutableStateOf("") }
+                    
+                    var showJoinPasswordDialog by remember { mutableStateOf<WifiP2pDevice?>(null) }
+                    var joinPasswordInput by remember { mutableStateOf("") }
+
+                    // Back Handler to minimize instead of closing
+                    BackHandler(enabled = viewModel.connectionStatus == ConnectionStatus.CONNECTED && !viewModel.isMinimized) {
+                        viewModel.isMinimized = true
+                    }
                     Spacer(modifier = Modifier.height(24.dp))
                     
                     GlassCard(modifier = Modifier.fillMaxWidth()) {
@@ -300,22 +313,100 @@ class MainActivity : ComponentActivity() {
                                 color = SoftGray
                             )
                             Spacer(modifier = Modifier.height(20.dp))
+
+                            // State for Dialogs used here
+
+                            if (showCreateGroupDialog) {
+                                AlertDialog(
+                                    onDismissRequest = { showCreateGroupDialog = false },
+                                    containerColor = DeepNavy,
+                                    title = { Text("Create Intercom Space", color = PureWhite) },
+                                    text = {
+                                        Column {
+                                            OutlinedTextField(
+                                                value = tempGroupName,
+                                                onValueChange = { tempGroupName = it },
+                                                label = { Text("Space Name") },
+                                                singleLine = true,
+                                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = PureWhite, unfocusedTextColor = PureWhite)
+                                            )
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            OutlinedTextField(
+                                                value = tempGroupPassword,
+                                                onValueChange = { tempGroupPassword = it },
+                                                label = { Text("Space Password") },
+                                                singleLine = true,
+                                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = PureWhite, unfocusedTextColor = PureWhite)
+                                            )
+                                        }
+                                    },
+                                    confirmButton = {
+                                        Button(onClick = {
+                                            viewModel.riderName = tempGroupName
+                                            viewModel.groupPassword = tempGroupPassword
+                                            changeDeviceName(tempGroupName)
+                                            createGroup()
+                                            showCreateGroupDialog = false
+                                        }) { Text("Create") }
+                                    }
+                                )
+                            }
+
+                            if (showJoinPasswordDialog != null) {
+                                AlertDialog(
+                                    onDismissRequest = { showJoinPasswordDialog = null },
+                                    containerColor = DeepNavy,
+                                    title = { Text("Join Space", color = PureWhite) },
+                                    text = {
+                                        OutlinedTextField(
+                                            value = joinPasswordInput,
+                                            onValueChange = { joinPasswordInput = it },
+                                            label = { Text("Enter Password") },
+                                            singleLine = true,
+                                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = PureWhite, unfocusedTextColor = PureWhite)
+                                        )
+                                    },
+                                    confirmButton = {
+                                        Button(onClick = {
+                                            viewModel.groupPassword = joinPasswordInput
+                                            showJoinPasswordDialog?.let { connectToDevice(it) }
+                                            showJoinPasswordDialog = null
+                                        }) { Text("Join") }
+                                    }
+                                )
+                            }
                             
-                            if (viewModel.connectionStatus != ConnectionStatus.SEARCHING) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                                Button(
+                                    onClick = { showCreateGroupDialog = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = StatusBlue.copy(alpha = 0.3f)),
+                                    shape = RoundedCornerShape(14.dp),
+                                    modifier = Modifier.weight(1f).height(48.dp)
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Create", fontSize = 12.sp)
+                                }
+                                
+                                Spacer(modifier = Modifier.width(8.dp))
+
                                 Button(
                                     onClick = { 
                                         discoverDevices()
-                                        scope.launch { snackbarHostState.showSnackbar("Initializing Scan...") }
+                                        scope.launch { snackbarHostState.showSnackbar("Scanning...") }
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = GlassWhiteHigh),
                                     shape = RoundedCornerShape(14.dp),
-                                    modifier = Modifier.height(48.dp)
+                                    modifier = Modifier.weight(1f).height(48.dp)
                                 ) {
                                     Icon(Icons.Default.WifiTethering, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Scan for Riders", fontWeight = FontWeight.Medium)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Join", fontSize = 12.sp)
                                 }
-                            } else {
+                            }
+                            
+                            if (viewModel.connectionStatus == ConnectionStatus.SEARCHING) {
+                                Spacer(modifier = Modifier.height(16.dp))
                                 CircularProgressIndicator(color = PureWhite, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                             }
                         }
@@ -324,7 +415,7 @@ class MainActivity : ComponentActivity() {
                     Spacer(modifier = Modifier.height(32.dp))
 
                     Text(
-                        "DETECTED NODES",
+                        "AVAILABLE SPACES",
                         modifier = Modifier.fillMaxWidth().padding(start = 4.dp),
                         style = MaterialTheme.typography.labelSmall,
                         color = SoftGray,
@@ -346,9 +437,8 @@ class MainActivity : ComponentActivity() {
                                         requestConnectionInfo()
                                     } else {
                                         viewModel.selectedDeviceAddress = device.deviceAddress
-                                        connectToDevice(device)
+                                        showJoinPasswordDialog = device
                                     }
-                                    scope.launch { snackbarHostState.showSnackbar("Pairing with Node...") }
                                 }
                             )
                         }
@@ -364,13 +454,23 @@ class MainActivity : ComponentActivity() {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(DeepNavy.copy(alpha = 0.85f))
-                            .clickable(enabled = false) {},
-                        contentAlignment = Alignment.Center
+                            .background(if (viewModel.isMinimized) Color.Transparent else DeepNavy.copy(alpha = 0.85f))
+                            .padding(if (viewModel.isMinimized) 16.dp else 0.dp),
+                        contentAlignment = if (viewModel.isMinimized) Alignment.BottomEnd else Alignment.Center
                     ) {
-                        GlassCard(modifier = Modifier.padding(24.dp)) {
+                        val cardScale by animateFloatAsState(if (viewModel.isMinimized) 0.6f else 1f, label = "cardScale")
+                        
+                        GlassCard(
+                            modifier = Modifier
+                                .then(if (viewModel.isMinimized) Modifier.size(280.dp) else Modifier.padding(24.dp))
+                                .graphicsLayer {
+                                    scaleX = cardScale
+                                    scaleY = cardScale
+                                }
+                                .clickable { if (viewModel.isMinimized) viewModel.isMinimized = false }
+                        ) {
                             Column(
-                                modifier = Modifier.padding(40.dp),
+                                modifier = Modifier.padding(if (viewModel.isMinimized) 16.dp else 40.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
@@ -379,81 +479,87 @@ class MainActivity : ComponentActivity() {
                                         initialValue = 1f, targetValue = 1.2f,
                                         animationSpec = infiniteRepeatable(tween(2000), RepeatMode.Reverse), label = "scale"
                                     )
-                                    Box(Modifier.size(100.dp).graphicsLayer { scaleX = pulseScale; scaleY = pulseScale }.background(PureWhite.copy(alpha = 0.05f), CircleShape))
+                                    Box(Modifier.size(if (viewModel.isMinimized) 40.dp else 100.dp).graphicsLayer { scaleX = pulseScale; scaleY = pulseScale }.background(PureWhite.copy(alpha = 0.05f), CircleShape))
                                     Icon(
                                         Icons.Default.BluetoothAudio,
                                         contentDescription = null,
                                         tint = PureWhite,
-                                        modifier = Modifier.size(56.dp)
+                                        modifier = Modifier.size(if (viewModel.isMinimized) 24.dp else 56.dp)
                                     )
                                 }
-                                Spacer(modifier = Modifier.height(24.dp))
-                                Text(
-                                    viewModel.currentDeviceDistance ?: "LOCKING SIGNAL...",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    color = PureWhite,
-                                    letterSpacing = 2.sp
-                                )
-                                viewModel.partnerBattery?.let { battery ->
+                                
+                                if (!viewModel.isMinimized) {
+                                    Spacer(modifier = Modifier.height(24.dp))
                                     Text(
-                                        "PARTNER BATTERY: $battery%",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = if (battery < 20) StatusRed else SoftGray,
-                                        modifier = Modifier.padding(top = 8.dp)
+                                        viewModel.currentDeviceDistance ?: "LOCKING SIGNAL...",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = PureWhite,
+                                        letterSpacing = 2.sp
                                     )
-                                }
-                                
-                                Spacer(modifier = Modifier.height(24.dp))
-                                
-                                // Output Controls Row
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceEvenly,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    // Speaker Toggle (Call vs Normal)
-                                    IconButton(
-                                        onClick = {
-                                            viewModel.isSpeakerphoneOn = !viewModel.isSpeakerphoneOn
-                                            voiceChatService?.setSpeakerphoneOn(viewModel.isSpeakerphoneOn)
-                                        },
-                                        modifier = Modifier.background(if (viewModel.isSpeakerphoneOn) PureWhite.copy(alpha = 0.2f) else Color.Transparent, CircleShape)
-                                    ) {
-                                        Icon(
-                                            if (viewModel.isSpeakerphoneOn) Icons.Default.VolumeUp else Icons.Default.Hearing,
-                                            contentDescription = null,
-                                            tint = PureWhite
+                                    viewModel.partnerBattery?.let { battery ->
+                                        Text(
+                                            "PARTNER BATTERY: $battery%",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = if (battery < 20) StatusRed else SoftGray,
+                                            modifier = Modifier.padding(top = 8.dp)
                                         )
                                     }
-
-                                    // Master Mute Output (Off button)
-                                    IconButton(
-                                        onClick = {
-                                            viewModel.isAudioOutputEnabled = !viewModel.isAudioOutputEnabled
-                                            voiceChatService?.setAudioOutputEnabled(viewModel.isAudioOutputEnabled)
-                                        },
-                                        modifier = Modifier.background(if (!viewModel.isAudioOutputEnabled) StatusRed.copy(alpha = 0.4f) else Color.Transparent, CircleShape)
+                                    
+                                    Spacer(modifier = Modifier.height(24.dp))
+                                    
+                                    // Output Controls Row
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceEvenly,
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Icon(
-                                            if (viewModel.isAudioOutputEnabled) Icons.Default.Headset else Icons.Default.HeadsetOff,
-                                            contentDescription = null,
-                                            tint = if (viewModel.isAudioOutputEnabled) PureWhite else StatusRed
-                                        )
-                                    }
-                                }
+                                        // Speaker Toggle (Call vs Normal)
+                                        IconButton(
+                                            onClick = {
+                                                viewModel.isSpeakerphoneOn = !viewModel.isSpeakerphoneOn
+                                                voiceChatService?.setSpeakerphoneOn(viewModel.isSpeakerphoneOn)
+                                            },
+                                            modifier = Modifier.background(if (viewModel.isSpeakerphoneOn) PureWhite.copy(alpha = 0.2f) else Color.Transparent, CircleShape)
+                                        ) {
+                                            Icon(
+                                                if (viewModel.isSpeakerphoneOn) Icons.AutoMirrored.Filled.VolumeUp else Icons.Default.Hearing,
+                                                contentDescription = null,
+                                                tint = PureWhite
+                                            )
+                                        }
 
-                                Spacer(modifier = Modifier.height(40.dp))
-                                Button(
-                                    onClick = { 
-                                        stopVoiceChat()
-                                        disconnectFromDevice()
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = StatusRed.copy(alpha = 0.2f)),
-                                    border = BorderStroke(1.dp, StatusRed.copy(alpha = 0.5f)),
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.fillMaxWidth().height(54.dp)
-                                ) {
-                                    Text("TERMINATE LINK", color = StatusRed, fontWeight = FontWeight.Bold)
+                                        // Master Mute Output (Off button)
+                                        IconButton(
+                                            onClick = {
+                                                viewModel.isAudioOutputEnabled = !viewModel.isAudioOutputEnabled
+                                                voiceChatService?.setAudioOutputEnabled(viewModel.isAudioOutputEnabled)
+                                            },
+                                            modifier = Modifier.background(if (!viewModel.isAudioOutputEnabled) StatusRed.copy(alpha = 0.4f) else Color.Transparent, CircleShape)
+                                        ) {
+                                            Icon(
+                                                if (viewModel.isAudioOutputEnabled) Icons.Default.Headset else Icons.Default.HeadsetOff,
+                                                contentDescription = null,
+                                                tint = if (viewModel.isAudioOutputEnabled) PureWhite else StatusRed
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(40.dp))
+                                    Button(
+                                        onClick = { 
+                                            stopVoiceChat()
+                                            disconnectFromDevice()
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = StatusRed.copy(alpha = 0.2f)),
+                                        border = BorderStroke(1.dp, StatusRed.copy(alpha = 0.5f)),
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier.fillMaxWidth().height(54.dp)
+                                    ) {
+                                        Text("TERMINATE LINK", color = StatusRed, fontWeight = FontWeight.Bold)
+                                    }
+                                } else {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text("LIVE", color = StatusGreen, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -660,6 +766,30 @@ class MainActivity : ComponentActivity() {
         } catch (e: SecurityException) { viewModel.setStatus(ConnectionStatus.FAILED) }
     }
 
+    private fun createGroup() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return
+        
+        // Remove existing groups first to ensure a clean start
+        manager.removeGroup(channel, object : WifiP2pManager.ActionListener {
+            override fun onSuccess() { executeCreateGroup() }
+            override fun onFailure(reason: Int) { executeCreateGroup() }
+        })
+    }
+
+    private fun executeCreateGroup() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return
+        manager.createGroup(channel, object : WifiP2pManager.ActionListener {
+            override fun onSuccess() {
+                viewModel.isGroupCreated = true
+                viewModel.isGroupOwner = true
+                viewModel.setStatus(ConnectionStatus.CONNECTED)
+            }
+            override fun onFailure(reason: Int) {
+                viewModel.setStatus(ConnectionStatus.FAILED)
+            }
+        })
+    }
+
     private fun startPeerDiscovery() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return
         manager.discoverPeers(channel, object : WifiP2pManager.ActionListener {
@@ -724,7 +854,7 @@ class MainActivity : ComponentActivity() {
     }
 
     fun startVoiceChat(socket: Socket) {
-        voiceChatService?.startVoiceChat(socket)
+        voiceChatService?.startVoiceChat(socket, viewModel.isGroupOwner, viewModel.groupPassword)
         runOnUiThread {
             viewModel.setStatus(ConnectionStatus.CONNECTED)
             viewModel.isVoiceActive = true

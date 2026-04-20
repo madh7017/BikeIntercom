@@ -42,18 +42,51 @@ class VoiceChatManager {
     private val TYPE_AUDIO = 0.toByte()
     private val TYPE_LOCATION = 1.toByte()
     private val TYPE_BATTERY = 2.toByte()
+    private val TYPE_HANDSHAKE = 3.toByte()
 
-    fun addSocket(socket: Socket) {
+    var groupPassword = ""
+
+    fun addSocket(socket: Socket, isOwner: Boolean) {
         try {
             socket.tcpNoDelay = true
-            sockets.add(socket)
             val outputStream = DataOutputStream(socket.getOutputStream())
-            outputStreams.add(outputStream)
-            
-            // Start a receiver thread for this specific socket
-            startReceiverThread(socket)
-        } catch (e: IOException) {
+            val inputStream = DataInputStream(socket.getInputStream())
+
+            if (isOwner) {
+                // Server (Owner) waits for password handshake
+                val type = inputStream.readByte()
+                if (type == TYPE_HANDSHAKE) {
+                    val receivedPassword = inputStream.readUTF()
+                    if (receivedPassword == groupPassword) {
+                        outputStream.writeBoolean(true) // Accept
+                        outputStream.flush()
+                        sockets.add(socket)
+                        outputStreams.add(outputStream)
+                        startReceiverThread(socket)
+                    } else {
+                        outputStream.writeBoolean(false) // Reject
+                        outputStream.flush()
+                        socket.close()
+                    }
+                }
+            } else {
+                // Client sends password handshake
+                outputStream.writeByte(TYPE_HANDSHAKE.toInt())
+                outputStream.writeUTF(groupPassword)
+                outputStream.flush()
+                
+                val accepted = inputStream.readBoolean()
+                if (accepted) {
+                    sockets.add(socket)
+                    outputStreams.add(outputStream)
+                    startReceiverThread(socket)
+                } else {
+                    socket.close()
+                }
+            }
+        } catch (e: Exception) {
             Log.e("VoiceChatManager", "Error adding socket", e)
+            try { socket.close() } catch (ex: Exception) {}
         }
     }
 

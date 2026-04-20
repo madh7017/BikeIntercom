@@ -80,7 +80,7 @@ class VoiceChatService : Service() {
         return START_STICKY
     }
 
-    fun startVoiceChat(socket: Socket) {
+    fun startVoiceChat(socket: Socket, isOwner: Boolean, password: String) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
                 .setAudioAttributes(AudioAttributes.Builder()
@@ -108,6 +108,7 @@ class VoiceChatService : Service() {
 
         if (voiceChatManager == null) {
             voiceChatManager = VoiceChatManager()
+            voiceChatManager?.groupPassword = password
             voiceChatManager?.onLocationReceived = { lat, lng ->
                 onLocationUpdate?.invoke(lat, lng)
             }
@@ -124,8 +125,8 @@ class VoiceChatService : Service() {
             }
             startBatteryBroadcasting()
         }
-        
-        voiceChatManager?.addSocket(socket)
+
+        voiceChatManager?.addSocket(socket, isOwner)
         isServiceRunning = true
     }
 
